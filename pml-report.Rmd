@@ -1,0 +1,114 @@
+---
+title: "Practical Machine Learning Assignment"
+output: html_document
+---
+
+*by Matthew Chan*
+
+## Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+### Data
+
+The training data for this project are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+### Task
+
+The goal of this project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set. This report describes how the model was built, cross validation performed, expected out of sample error, and justifications for choices made.
+
+## Loading & cleaning the data
+
+First, we load the downloaded datasets:
+
+```{r, cache=TRUE}
+training <- read.csv("pml-training.csv", na.strings=c("NA",""))
+testing <- read.csv("pml-testing.csv", na.strings=c("NA",""))
+```
+
+Next, we remove columns with any missing values from the training and test sets, as well as the first seven columns (not relevant as predictors):
+
+```{r}
+training <- training[, apply(training, 2, function(x) !any(is.na(x)))]
+testing <- testing[, apply(testing, 2, function(x) !any(is.na(x)))]
+training <- training[, -c(1:7)]
+testing <- testing[, -c(1:7)]
+```
+
+We need to assess whether any of the predictor variables have zero or near-zero variance:
+
+```{r}
+library(caret)
+
+nzv <- nearZeroVar(training, saveMetrics = TRUE)
+print(nzv)
+```
+
+As we can see above, there are no variables remaining that have zero or near-zero variance - there is no need to remove any predictors from the model at this stage. Lastly, we partition the training set into training and validation sets.
+
+```{r}
+set.seed(420)
+inTrain <- createDataPartition(training$classe, p = 0.6, list = FALSE)
+myTrain <- training[inTrain, ]
+myValid <- training[-inTrain, ]
+```
+
+## Creating models
+
+### Decision tree
+
+First, we try a simple decision tree using rpart, setting the seed for reproducibility and printing the results:
+
+``` {r}
+library(rpart)
+library(rattle)
+set.seed(420)
+
+modelDT <- train(classe ~ ., data = myTrain, method = "rpart")
+print(modelDT, digits = 3)
+
+fancyRpartPlot(modelDT$finalModel)
+```
+
+Next, we use this model to predict on the test set and compare to the true results:
+
+```{r}
+predDT <- predict(modelDT, myValid)
+
+cmDT <- confusionMatrix(predDT, myValid$classe)
+print(cmDT)
+```
+
+The accuracy given for this model is quite poor (0.4968), so we need to consider trying other methods to determine the model.
+
+### Random forests
+
+We can try the random forests method to obtain a better prediction accuracy:
+
+``` {r}
+library(randomForest)
+set.seed(420)
+
+modelRF <- randomForest(classe ~ ., data = myTrain)
+
+predRF <- predict(modelRF, myValid)
+
+cmRF <- confusionMatrix(predRF, myValid$classe)
+print(cmRF)
+```
+
+The accuracy given for this model is significantly better (0.9932), with an out-of-sample error rate of 0.0068.
+
+## Testing the model on the test data
+
+Below are the final predictions for the 20 test samples based on the random forests model.
+
+```{r}
+predict(modelRF, testing)
+```
